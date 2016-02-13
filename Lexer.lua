@@ -1,15 +1,15 @@
-local find, sub, remove, tonum = string.find, string.sub, table.remove, tonumber
-local exprs = {
-	"if", "elseif", "else", "while", "repeat", "until", "for", "do",
-	"return", "break", "true", "false", "nil", "local", "typeof",
-	"static","shared", "public", "private", "function", "switch",
-	"extends", "extension", "overloaded", "class", "require", "new",
-	"and", "or", "not", "in", "guard"
+local find, sub, remove, concat, tonum = string.find, string.sub, table.remove, table.concat, tonumber
+local exprs = { -- Commented out keywords are ones that have no functionality yet.
+	"if", "elseif", "else", "while", "repeat", "until", "for",
+	"return", "break", "true", "false", "nil", "local", 
+	"static","shared", "public", "private", "function", --"switch",
+	"overloaded", "class", "do", --"extension", "extends",
+	"and", "or", "not", "guard", "metamethod", --"in"
 }
 local token_exprs = {}; for i = 1, #exprs do token_exprs[exprs[i]] = true end
 
 return function(text)
-	local position, tokens, chars, base, token = 0, {}, {}, 10
+	local position, tokens, chars, base, insert, token = 0, {}, {}, 10, table.insert
 	local inComment, skip = false, false
 
 	-- Make this better
@@ -46,10 +46,6 @@ return function(text)
 		return token 
 	end
 
-	local function isWhitespace()
-		return find(chars[1][1], "%s")
-	end
-
 	local function isNumber()
 		token = nextToken("-", true)..nextToken("%d")
 		if token == "0" then
@@ -59,10 +55,14 @@ return function(text)
 			else token, base = token..nextToken("%.", true)..nextToken("%d"), 10 end
 		elseif token ~= "" then
 			token, base = token..nextToken("%.", true)..nextToken("%d"), 10
-			if token == "-" then table.insert(chars, 1, {"-", chars[1][2]}); return false end
+			if token == "-" then insert(chars, 1, {"-", chars[1][2]}); return false end
 		end
 
 		return token ~= ""
+	end
+
+	local function isWhitespace()
+		return find(chars[1][1], "%s")
 	end
 
 	local function isIdentifier()
@@ -72,11 +72,7 @@ return function(text)
 
 	local function isSymbol()
 		token = nextToken("[%[%]%(%)@#{};:,]", true)
-		return token ~= ""
-	end
-
-	local function isSymbol2()
-		token = nextToken("[%%%+%-%*%^%.<>=/!~|&]")
+		token = token == "" and nextToken("[%%%+%-%*%^%.<>=/!~|&]") or token
 		return token ~= ""
 	end
 
@@ -96,19 +92,19 @@ return function(text)
 	end
 
 	while chars[1] do
-		local line = chars[1][2]
+		local line = chars[1][2] or "?"
 		if isWhitespace() then
 			nextChar()
 		elseif isNumber() then
 			tokens[#tokens + 1] = {tonum(token, base), "num", line}
 		elseif isIdentifier() then
 			tokens[#tokens + 1] = {token, token_exprs[token] and "key" or "id", line}
-		elseif isSymbol() or isSymbol2() then
+		elseif isSymbol() then
 			tokens[#tokens + 1] = {token, "sym", line}
 		elseif isString() then
 			tokens[#tokens + 1] = {'"'..token..'"', "str", line}
 		else
-			error("invalid token: |" ..tostring(token).. "|")
+			error("invalid token @ line " ..line..  ": |" ..tostring(token).. "|")
 		end
 	end
 
